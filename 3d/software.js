@@ -3,9 +3,39 @@
 (function (root) {
   'use strict';
   const T = root.Taxi3D;
-  const CACHE = 16, DRAW = 24, SKY = [176, 209, 219], FOG_STEPS = 24;
+  const CACHE = 24, DRAW = 28, SKY = [176, 209, 219], FOG_STEPS = 24;
   const samePoint = (a, i, j) => a[i] === a[j] && a[i + 1] === a[j + 1] && a[i + 2] === a[j + 2];
   function capacity(n) { let p = 64; while (p < n) p *= 2; return p; }
+
+  // Exact sightline checks for bridge supports only. The general scene still
+  // uses the inexpensive painter; these bounded road triangles prevent a pier
+  // from painting through the deck without hiding it when viewed underneath.
+  function roadOccluders(map) {
+    if (!map || !map.roadProfiles) return null;
+    const triangles=[];
+    const tri=(a,b,c)=>{const ux=b[0]-a[0],uz=b[2]-a[2],vx=c[0]-a[0],vz=c[2]-a[2],det=ux*vz-uz*vx;if(Math.abs(det)<1e-8)return;
+      const gy=((b[1]-a[1])*vz-(c[1]-a[1])*uz)/det,gz=(ux*(c[1]-a[1])-vx*(b[1]-a[1]))/det;
+      triangles.push({x:a[0],z:a[2],ux,uz,vx,vz,det,gx:gy,gz,offset:a[1]-gy*a[0]-gz*a[2],minX:Math.min(a[0],b[0],c[0]),maxX:Math.max(a[0],b[0],c[0]),minZ:Math.min(a[2],b[2],c[2]),maxZ:Math.max(a[2],b[2],c[2])});};
+    const edge=(p,n)=>[p.x+p.nx*n,p.height,p.z+p.nz*n];
+    for(const p of map.roadProfiles)for(let i=1;i<p.points.length;i++){
+      const a=p.points[i-1],b=p.points[i],la=edge(a,a.halfWidth),lb=edge(b,b.halfWidth),ra=edge(a,-a.halfWidth),rb=edge(b,-b.halfWidth),ma=edge(a,0),mb=edge(b,0);
+      tri(la,lb,mb);tri(la,mb,ma);tri(ma,mb,rb);tri(ma,rb,ra);
+    }
+    return {map,triangles};
+  }
+  function roadBlocksPoint(roads,eye,x,y,z) {
+    const dx=x-eye[0],dy=y-eye[1],dz=z-eye[2],m=roads.map;
+    if(Math.abs(dy)>1e-8){const t=(m.highwayHeight-eye[1])/dy;if(t>.0001&&t<1.00001){const px=eye[0]+dx*t,pz=eye[2]+dz*t;if(px>=m.highwayStart&&px<=m.highwayEnd&&Math.abs(pz-m.hy)<=m.highwayHalf)return true;}}
+    const minX=Math.min(x,eye[0]),maxX=Math.max(x,eye[0]),minZ=Math.min(z,eye[2]),maxZ=Math.max(z,eye[2]);
+    for(const q of roads.triangles){
+      if(maxX<q.minX||minX>q.maxX||maxZ<q.minZ||minZ>q.maxZ)continue;
+      const den=dy-q.gx*dx-q.gz*dz;if(Math.abs(den)<1e-8)continue;
+      const t=(q.gx*eye[0]+q.gz*eye[2]+q.offset-eye[1])/den;if(t<=.0001||t>=1.00001)continue;
+      const px=eye[0]+dx*t-q.x,pz=eye[2]+dz*t-q.z,u=(px*q.vz-pz*q.vx)/q.det,v=(q.ux*pz-q.uz*px)/q.det;
+      if(u>=-.00001&&v>=-.00001&&u+v<=1.00001)return true;
+    }
+    return false;
+  }
 
   class TaxiSoftwareRenderer {
     constructor(canvas) {
@@ -50,6 +80,8 @@
       const src = mesh.data, n = Math.floor(src.length / 18);
       if (!b.data || b.capacity < n) { b.capacity = capacity(n); b.data = new Float32Array(b.capacity * CACHE); }
       const dst = b.data; b.count = n * 3; b.triangles = n;
+      b.underRoad=mesh.underRoad?Uint8Array.from(mesh.underRoad):null;
+      b.roadOccluders=mesh.roadMap?roadOccluders(mesh.roadMap):null;
       for (let t = 0; t < n; t++) {
         const s = t * 18, d = t * CACHE;
         let cx = 0, cy = 0, cz = 0, ymin = Infinity, ymax = -Infinity;
@@ -69,7 +101,10 @@
         dst[d + 14] = ymax - ymin < .002 && ymax <= 1.12 ? 1 : 0;
         const ax = dst[d + 3] - dst[d], ay = dst[d + 4] - dst[d + 1], az = dst[d + 5] - dst[d + 2];
         const bx = dst[d + 6] - dst[d], by = dst[d + 7] - dst[d + 1], bz = dst[d + 8] - dst[d + 2];
-        dst[d + 15] = Math.hypot(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
+        dst[d + 16] = ay * bz - az * by;dst[d + 17] = az * bx - ax * bz;dst[d + 18] = ax * by - ay * bx;
+        dst[d + 15] = Math.hypot(dst[d+16],dst[d+17],dst[d+18]);
+        dst[d+19] = mesh.cull&&mesh.cull[t]?1:0;
+        dst[d+23]=3;
       }
       // Treat Mesh.quad's two triangles as one face for stable painter ordering.
       for (let t = 0; t + 1 < n; t++) {
@@ -78,7 +113,10 @@
         for (let k = 9; k < 12; k++) { const q = (dst[d + k] + dst[e + k]) / 2; dst[d + k] = dst[e + k] = q; }
         // A conservative bound remains valid after replacing the sort centre.
         const radius = Math.max(dst[d + 12], dst[e + 12]) * 1.5;
-        dst[d + 12] = dst[e + 12] = radius; t++;
+        dst[d + 12] = dst[e + 12] = radius;
+        // Keep the original quad as one polygon: half the path calls and no diagonal AA cracks.
+        for(let k=0;k<3;k++)dst[d+20+k]=src[s+30+k];
+        dst[d+23]=4;dst[e+23]=-1;dst[d+15]*=2; t++;
       }
     }
 
@@ -114,22 +152,28 @@
       const cp = Math.cos(camera.pitch || 0), sp = Math.sin(camera.pitch || 0);
       const tanY = Math.tan(fov / 2), tanX = tanY * w / h, focal = h / (2 * tanY), horizontalSign = camera.mirror ? -1 : 1;
       const sxNorm = Math.sqrt(1 + tanX * tanX), syNorm = Math.sqrt(1 + tanY * tanY);
-      let count = 0, ng = 0, no = 0;
+      let count = 0, ng = 0, no = 0, hiddenSupports = 0;
       for (const b of buffers) {
         if (!b.data || !b.triangles) continue;
         this.calls++;
         const data = b.data;
         for (let t = 0; t < b.triangles; t++) {
-          const d = t * CACHE, dx = data[d + 9] - eye[0], dy = data[d + 10] - eye[1], dz = data[d + 11] - eye[2];
+          const d = t * CACHE;if(data[d+23]<0)continue;const vertexCount=data[d+23]||3;const dx = data[d + 9] - eye[0], dy = data[d + 10] - eye[1], dz = data[d + 11] - eye[2];
+          // Solid volumes have consistent inward winding. Skip their rear-facing walls.
+          if(data[d+19]&&data[d+16]*dx+data[d+17]*dy+data[d+18]*dz<0)continue;
           const horizontal = dx * cyaw + dz * syaw;
           const depth = horizontal * cp + dy * sp, right = -dx * syaw + dz * cyaw, up = dy * cp - horizontal * sp;
           const radius = data[d + 12], flat = data[d + 14] === 1;
           if (depth + radius < near || depth - radius > far || Math.abs(right) - radius * sxNorm > depth * tanX || Math.abs(up) - radius * syNorm > depth * tanY) continue;
           // Subpixel details have no readable shape, especially in the small mirror.
           if (!flat && depth > 80 && data[d + 15] * focal * focal / (depth * depth) < (rect ? 1.1 : .18)) continue;
-          let input = this._clipA, output = this._clipB, n = 3, clipMask = 0, outsideMask = 63;
-          for (let v = 0; v < 3; v++) {
-            const k = d + v * 3, a = data[k] - eye[0], b = data[k + 1] - eye[1], c = data[k + 2] - eye[2], forward = a * cyaw + c * syaw;
+          if(b.underRoad&&b.underRoad[t]&&b.roadOccluders){
+            let hidden=true;for(let v=0;v<vertexCount;v++){const k=d+(v===3?20:v*3);if(!roadBlocksPoint(b.roadOccluders,eye,data[k],data[k+1],data[k+2])){hidden=false;break;}}
+            if(hidden){hiddenSupports++;continue;}
+          }
+          let input = this._clipA, output = this._clipB, n = vertexCount, clipMask = 0, outsideMask = 63;
+          for (let v = 0; v < vertexCount; v++) {
+            const k = d + (v===3?20:v * 3), a = data[k] - eye[0], b = data[k + 1] - eye[1], c = data[k + 2] - eye[2], forward = a * cyaw + c * syaw;
             const rx = -a * syaw + c * cyaw, uy = b * cp - forward * sp, fz = forward * cp + b * sp;
             input[v * 3] = rx; input[v * 3 + 1] = uy; input[v * 3 + 2] = fz;
             const mask = (fz < near ? 1 : 0) | (fz > far ? 2 : 0) | (rx < -fz * tanX ? 4 : 0) | (rx > fz * tanX ? 8 : 0) | (uy < -fz * tanY ? 16 : 0) | (uy > fz * tanY ? 32 : 0);
@@ -189,7 +233,7 @@
       };
       draw(floors); draw(solids); ctx.restore();
       this.trianglesDrawn = count;
-      this.stats = { triangles: count, groundTriangles: ng, objectTriangles: no, mirror: !!rect, cachedCapacity: this._ground.length };
+      this.stats = { triangles: count, groundTriangles: ng, objectTriangles: no, hiddenSupports, mirror: !!rect, cachedCapacity: this._ground.length };
       return matrix;
     }
 
