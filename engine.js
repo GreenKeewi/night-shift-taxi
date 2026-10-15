@@ -3,7 +3,7 @@
 const PI=Math.PI,TAU=PI*2,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),angleDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 const PEOPLE=['Jules','Morgan','Alex','Sam','Robin','Charlie','Kai','Taylor','Avery','Casey','Drew','Frankie'];
-const PLACES=['Noodle Club','Record Shop','Central Arcade','Hotel Luna','Flower Market','Night Cinema','Bluebird Café','Jazz House','Corner Books','Union Station','Skyline Diner','The Observatory'];
+const PLACES=['Noodle Club','Record Shop','Central Arcade','Hotel Luna','Flower Market','Night Cinema','Bluebird Café','Jazz House','Corner Books','Union Station','Skyline Diner','The Observatory','Eastside Gallery','Grand Theater','Harbor Hotel','Late Night Bakery','West End Club','Riverside Studios','Metro Hall','Garden Apartments','Freight Depot','Bowling Alley','Palm Terrace','City Museum','Hilltop Lounge'];
 const STREETS=['Harbor Street','Lantern Avenue','Market Street','Union Avenue','Garden Road'];
 const AVENUES=['Ash Avenue','Cedar Avenue','Broadway','Juniper Avenue','Maple Avenue','Park Avenue'];
 function makeMap(seed=8427){
@@ -18,7 +18,7 @@ function makeMap(seed=8427){
  }
  for(let j=0;j<5;j++)for(let i=0;i<5;i++){
   const x=(xs[i]+xs[i+1])/2,y=ys[j],rev=(i+j)%3===2;
-  const bay={id:bays.length,x,y:y+(rev?116:79),a:rev?-PI/2:0,type:rev?'reverse':'parallel',street:STREETS[j],place:PLACES[(i*3+j*2)%PLACES.length],node:j*6+i,col:i,row:j,roadY:y};bays.push(bay);
+  const bay={id:bays.length,x,y:y+(rev?116:79),a:rev?-PI/2:0,type:rev?'reverse':'parallel',street:STREETS[j],place:PLACES[bays.length%PLACES.length],node:j*6+i,col:i,row:j,roadY:y};bays.push(bay);
   if(!rev)for(const offset of [-78,78])parked.push({x:x+offset,y:y+79,a:0,parked:true,color:'#647477'});
   else for(const offset of [-43,43])parked.push({x:x+offset,y:y+116,a:-PI/2,parked:true,color:'#667d84'});
  }
@@ -52,7 +52,7 @@ class Game{
    const want=m.hy+c.dir*(c.lane?53:26);c.y+=(want-c.y)*Math.min(1,dt*1.2);if(Math.abs(c.y-want)<1)c.merge=null;let desired=c.desired*(1+Math.min(.28,this.difficulty*.015))*(1-rush*.33);for(const o of this.traffic){const ahead=(o.x-c.x)*c.dir;if(o!==c&&Math.abs(o.y-c.y)<23&&ahead>0&&ahead<100)desired=Math.min(desired,Math.max(0,(ahead-48)*1.4));}c.speed+=(desired-c.speed)*dt*2;c.x+=c.dir*c.speed*dt;if(c.x>m.w-90)c.x=95;if(c.x<90)c.x=m.w-95;continue;}
    const n=m.nodes[c.from],to=m.nodes[c.to],dx=to.x-n.x,dy=to.y-n.y,L=Math.hypot(dx,dy),a=Math.atan2(dy,dx),left=L-c.t,s=signal(m,to,this.time),red=(Math.abs(dx)>1?s.horizontal:s.vertical)!=='green';let target=c.desired*(1+Math.min(.3,this.difficulty*.015))*(1-rush*.2);
    if(c.reserved!==undefined&&c.from===c.reserved&&c.t>88){delete this.junctions[c.reserved];c.reserved=undefined;}
-   if(left<150&&left>60){const owner=this.junctions[c.to];if(owner!==undefined&&owner!==c.id)target=Math.min(target,Math.max(0,(left-83)*1.4));else if(!red&&c.reserved===undefined){this.junctions[c.to]=c.id;c.reserved=c.to;}}
+   if(left<150&&left>60){const owner=this.junctions[c.to];if(owner!==undefined&&owner!==c.id)target=Math.min(target,Math.max(0,(left-83)*1.4));else if(!red&&c.reserved===undefined&&!this.traffic.some(o=>o!==c&&o.kind==='street'&&o.from===c.from&&o.to===c.to&&o.t>c.t)){this.junctions[c.to]=c.id;c.reserved=c.to;}}
    if(red&&left>60&&left<180)target=Math.min(target,Math.max(0,(left-80)*1.45));
    if(left>68&&left<150&&this.traffic.some(o=>o!==c&&o.speed<7&&Math.hypot(o.x-to.x,o.y-to.y)<57))target=Math.min(target,Math.max(0,(left-80)*1.3));
    const look=45+c.speed*.65;for(const o of this.traffic){if(o===c)continue;const rx=o.x-c.x,ry=o.y-c.y,along=rx*Math.cos(a)+ry*Math.sin(a),across=Math.abs(-rx*Math.sin(a)+ry*Math.cos(a));if(along>0&&along<look&&across<21)target=Math.min(target,Math.max(0,(along-48)*1.5));}
@@ -63,10 +63,10 @@ class Game{
    const f=m.nodes[c.from],t=m.nodes[c.to],aa=Math.atan2(t.y-f.y,t.x-f.x),ll=dist(f,t),px=f.x+(t.x-f.x)*c.t/ll-Math.sin(aa)*25,py=f.y+(t.y-f.y)*c.t/ll+Math.cos(aa)*25;c.x+=(px-c.x)*Math.min(1,dt*10);c.y+=(py-c.y)*Math.min(1,dt*10);c.a+=angleDiff(aa,c.a)*Math.min(1,dt*8);
   }}
  update(dt,input={}){if(this.mode!=='playing')return;dt=Math.min(dt,.05);this.time+=dt;this.difficulty=1+this.completed*.62+this.time/160;this.collisionCooldown=Math.max(0,this.collisionCooldown-dt);if(this.traffic.length<trafficLimit(this.time,this.difficulty)&&this.rand()<dt*(1.5+rushHour(this.time)*2))this.spawnTraffic();this.updateTraffic(dt);if(this.traffic.length>trafficLimit(this.time,this.difficulty)&&this.rand()<dt*.7){const k=this.traffic.findIndex(c=>dist(c,this.car)>800);if(k>=0)this.traffic.splice(k,1);}
-  const c=this.car,m=this.map,ox=c.x,oy=c.y,oa=c.a,road=isRoad(m,c.x,c.y),max= Math.abs(c.y-m.hy)<77?230:155,accel=road?125:55;
-  if(input.up)c.speed+=accel*dt;else if(input.down)c.speed-=(c.speed>4?225:80)*dt;else c.speed*=Math.exp(-dt*(input.brake?8:1.05));
-  if(input.brake)c.speed*=Math.exp(-dt*6);c.speed=clamp(c.speed,road?-64:-35,road?max:50);
-  const steer=(input.right?1:0)-(input.left?1:0);c.steer+=(steer-c.steer)*Math.min(1,dt*9);if(Math.abs(c.speed)>1)c.a+=c.steer*c.speed/(50+Math.abs(c.speed)*.15)*dt;c.a=angleDiff(c.a,0);c.x+=Math.cos(c.a)*c.speed*dt;c.y+=Math.sin(c.a)*c.speed*dt;
+  const c=this.car,m=this.map,ox=c.x,oy=c.y,oa=c.a,road=isRoad(m,c.x,c.y),max= Math.abs(c.y-m.hy)<77?195:125,accel=road?100:50;
+  if(input.up)c.speed+=accel*dt;else if(input.down)c.speed-=(c.speed>4?225:80)*dt;else c.speed*=Math.exp(-dt*(input.brake?8:1.4));
+  if(input.brake)c.speed*=Math.exp(-dt*6);c.speed=clamp(c.speed,road?-52:-30,road?max:50);
+  const steer=(input.right?1:0)-(input.left?1:0);c.steer+=(steer-c.steer)*Math.min(1,dt*7);if(Math.abs(c.speed)>1)c.a+=c.steer*c.speed/(48+Math.abs(c.speed)*.4)*dt;c.a=angleDiff(c.a,0);c.x+=Math.cos(c.a)*c.speed*dt;c.y+=Math.sin(c.a)*c.speed*dt;
   let blocked=c.x<65||c.y<85||c.x>m.w-65||c.y>m.h-65,hitKind='kerb';for(const b of m.buildings)if(buildingHit(c,b)){blocked=true;hitKind='building';break;}
   if(!blocked)for(const b of m.parked)if(carHit(c,b)){blocked=true;hitKind='parked car';break;}
   if(!blocked)for(const b of this.traffic)if(carHit(c,b)){blocked=true;hitKind='traffic';break;}
@@ -79,8 +79,8 @@ class Game{
   for(const n of m.nodes){if(Math.abs(c.x-n.x)>100||Math.abs(c.y-n.y)>100)continue;let axis=null,cross=false;if(Math.abs(vx)>Math.abs(vy)&&Math.abs(c.y-n.y)<55){axis='horizontal';cross=vx>0?ox<n.x-69&&c.x>=n.x-69:ox>n.x+69&&c.x<=n.x+69;}else if(Math.abs(c.x-n.x)<55){axis='vertical';cross=vy>0?oy<n.y-69&&c.y>=n.y-69:oy>n.y+69&&c.y<=n.y+69;}
    if(cross&&signal(m,n,this.time)[axis]==='red'&&(this.signalCooldown[n.id]||0)<this.time){this.signalCooldown[n.id]=this.time+4;this.cash=Math.max(0,this.cash-12);this.job.timeLeft=Math.max(1,this.job.timeLeft-5);this.combo=0;this.stats.redLights++;this.note('RED LIGHT · $12','Cross on green. That cost 5 seconds, too.','bad');}
   }}
- parkingStatus(){const c=this.car,b=this.target(),dx=c.x-b.x,dy=c.y-b.y,along=dx*Math.cos(b.a)+dy*Math.sin(b.a),across=-dx*Math.sin(b.a)+dy*Math.cos(b.a),aligned=Math.abs(angleDiff(c.a,b.a))<.23,inside=Math.abs(along)<(b.type==='parallel'?24:15)&&Math.abs(across)<10,stopped=Math.abs(c.speed)<5,reverse=b.type!=='reverse'||this.reverseMeters>10;return{near:dist(c,b)<150,inside,aligned,stopped,reverse,ready:inside&&aligned&&stopped&&reverse,progress:this.parkHold/1.25};}
- checkParking(dt){const c=this.car,b=this.target();if(dist(c,b)<78&&c.speed<-3&&Math.abs(angleDiff(c.a,b.a))<.65)this.reverseMeters+=-c.speed*dt;const p=this.parkingStatus();if(p.ready)this.parkHold+=dt;else this.parkHold=Math.max(0,this.parkHold-dt*2);if(this.parkHold<1.25)return;
+ parkingStatus(){const c=this.car,b=this.target(),dx=c.x-b.x,dy=c.y-b.y,along=dx*Math.cos(b.a)+dy*Math.sin(b.a),across=-dx*Math.sin(b.a)+dy*Math.cos(b.a),aligned=Math.abs(angleDiff(c.a,b.a))<.23,inside=Math.abs(along)<(b.type==='parallel'?24:15)&&Math.abs(across)<12,stopped=Math.abs(c.speed)<5,reverse=b.type!=='reverse'||this.reverseMeters>10;return{near:dist(c,b)<150,inside,aligned,stopped,reverse,ready:inside&&aligned&&stopped&&reverse,progress:this.parkHold/1.25};}
+ checkParking(dt){const c=this.car,b=this.target();if(dist(c,b)<78&&c.speed<-3&&Math.abs(angleDiff(c.a,b.a))<.65)this.reverseMeters+=-c.speed*dt;if(dist(c,b)<27&&Math.abs(c.speed)<11&&Math.abs(angleDiff(c.a,b.a))<.32)c.a+=angleDiff(b.a,c.a)*Math.min(1,dt*4);const p=this.parkingStatus();if(p.ready)this.parkHold+=dt;else this.parkHold=Math.max(0,this.parkHold-dt*2);if(this.parkHold<1.25)return;
   this.parkHold=0;this.reverseMeters=0;
   if(this.job.stage==='pickup'){this.stats.pickups++;this.job.stage='dropoff';this.job.timeLeft=Math.max(58,dist(this.job.pickup,this.job.dropoff)/32+48-this.difficulty*1.6);this.job.total=this.job.timeLeft;this.note('RIDER ON BOARD',`${this.job.person} is heading to ${this.job.dropoff.place}.`,'good');this.lastTarget=this.job.dropoff.id;}
   else{this.completed++;this.stats.deliveries++;this.combo++;const tip=Math.max(0,Math.round(this.job.timeLeft*.2))+Math.min(20,this.combo*3),earned=this.job.fare+tip;this.cash+=earned;this.health=Math.min(100,this.health+9);this.note(`FARE COMPLETE · +$${earned}`,`$${tip} tip. Cab serviced +9%. Next call is in.`,'good');this.newJob();}
