@@ -63,3 +63,6 @@ body.show-map .map-section{display:block}
 @media(pointer:coarse){.touch-controls{bottom:12px}.notice{bottom:68px}.parking-panel{bottom:136px}}
 
 .map-meta{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:8px;color:var(--ink)}
+
+/* Native-resolution composition permits continuous subpixel camera motion. */
+#game{image-rendering:auto}
