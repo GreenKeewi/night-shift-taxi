@@ -130,10 +130,19 @@
       for(const z of zs){if(z-RH>from){rect(x-RH,from,RH*2,z-RH-from,0,C.asphalt);stats.roadSegments++;}from=z+RH;}
     }
     // Pavement at the outer road sides, with a distinct pale kerb.
-    rect(120,zs[0]-SH,xs[5]-20,SH-RH,.4,C.paving);
-    curbRun(120,zs[0]-RH,xs[5]+100,zs[0]-RH);
-    for(const x of [xs[0]-SH,xs[5]+RH])rect(x,120,SH-RH,zs[4]+RH-120,.4,C.paving);
-    for(const x of [xs[0]-RH,xs[5]+RH])curbRun(x,120,x,zs[4]+RH);
+    let edgeStart=120;
+    for(const edgeEnd of [...xs.map(x=>x-RH),xs[5]+100]){
+      if(edgeEnd>edgeStart){rect(edgeStart,zs[0]-SH,edgeEnd-edgeStart,SH-RH,.4,C.paving);curbRun(edgeStart,zs[0]-RH,edgeEnd,zs[0]-RH);}
+      edgeStart=edgeEnd+RH*2;
+    }
+    edgeStart=120;
+    for(const z of zs){
+      if(z-RH>edgeStart){
+        for(const x of [xs[0]-SH,xs[5]+RH])rect(x,edgeStart,SH-RH,z-RH-edgeStart,.4,C.paving);
+        for(const x of [xs[0]-RH,xs[5]+RH])curbRun(x,edgeStart,x,z-RH);
+      }
+      edgeStart=z+RH;
+    }
     // Mark two lanes in each direction, centred exactly on engine offsets 20 and 56.
     for(const z of zs)for(let i=0;i<5;i++)marks(xs[i]+130,z,xs[i+1]-130,z);
     for(const x of xs)for(let j=0;j<4;j++)marks(x,zs[j]+130,x,zs[j+1]-130);
