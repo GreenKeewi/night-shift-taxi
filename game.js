@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const E=TaxiEngine,$=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d',{alpha:false}),mini=$('minimap'),mc=mini.getContext('2d',{alpha:false}),keys={},touch={},PI=Math.PI;
-let seed=8427,game=new E.Game(seed),low=false,muted=false,best=0,menuIndex=0,menuKind='title',helpReturn='title',menuOptions=[],W=1,H=1,dpr=1,cam={x:game.car.x,y:game.car.y,a:game.car.a},worldCanvas=null,mapScale=.5,lastFrame=null,acc=0,lastDraw=0,uiClock=0,navClock=0,routePoints=[],lastNote=null,audioCtx=null,perfFrames=0,perfTime=0,actualFps=60;
+let seed=8427,game=new E.Game(seed),low=false,muted=false,best=0,menuIndex=0,menuKind='title',helpReturn='title',menuOptions=[],W=1,H=1,dpr=1,cam={x:game.car.x,y:game.car.y,a:game.car.a},worldCanvas=null,mapScale=1,lastFrame=null,acc=0,lastDraw=0,uiClock=0,navClock=0,routePoints=[],lastNote=null,audioCtx=null,perfFrames=0,perfTime=0,actualFps=60;
 // Physics stays at 60 Hz; every display frame samples the same interpolated pose.
 // No spring, look-ahead, speed zoom, pixel snapping or collision camera offset.
 const STEP=1/60;
@@ -90,7 +90,7 @@ function frame(t){
  if(!interval||elapsed>=interval-.1){drawWorld(t);lastDraw=interval?t-(elapsed%interval):t;perfFrames++;}
  perfTime+=dt;if(perfTime>=2){actualFps=Math.round(perfFrames/perfTime);perfFrames=0;perfTime=0;}requestAnimationFrame(frame);
 }
-canvas.dataset.build='toronto-7';resize();buildWorld();routePoints=smartRoute();updateUI();showMenu('title');requestAnimationFrame(frame);
+canvas.dataset.build='toronto-8';resize();buildWorld();routePoints=smartRoute();updateUI();showMenu('title');requestAnimationFrame(frame);
 // Read-only diagnostic snapshot for repeatable local QA. Simulation is kept separate.
 window.__taxi={get game(){return game;},get state(){return{mode:game.mode,menuKind,seed,low,muted,fps:actualFps,traffic:game.traffic.length,world:{width:game.map.w,height:game.map.h},car:{...game.car},job:JSON.parse(JSON.stringify(game.job)),stats:{...game.stats}};},get camera(){return{...cam,alpha:renderAlpha,width:W,height:H,dpr,headingUp:true};},get canvas(){return canvas;},showMenu,showHelp,closeHelp,newCity};
 })();
