@@ -1,29 +1,30 @@
-# Toronto Taxi · Driver's Seat
+# Toronto Taxi: GTA Lakeshore
 
-A separate low-poly 3D edition of Toronto Taxi. The original 2D edition remains at the repository root. Open this directory through any static web server; there is no build step, backend, CDN dependency, texture download, framework, or sign-in.
+A lightweight, keyboard-driven 3D driving game. Play at https://greenkeewi.github.io/taxi/ or the identical 3D mirror at https://greenkeewi.github.io/night-shift-taxi/3d/.
+
+The original 2D game remains at https://greenkeewi.github.io/night-shift-taxi/.
+
+## The regional expansion
+
+Three distinct, connected centres: Toronto's original 8×7 downtown/waterfront grid, a greener 6×6 Pickering-inspired town, and a lower industrial 6×6 Oshawa-inspired town. There are 128 junctions, 109 taxi destinations, twelve slip roads, and a continuous four-lane expressway across a 2.98 km wide world. Two greenbelt stretches each provide about a kilometre of uninterrupted highway driving. These are compressed, fictional places, not exact real street geometry.
+
+- **Regional dispatch** mixes intercity and local fares. **Intercity** always sends the rider to another city; **Local** stays in the current city. Pickups stay nearby. Fares and trip allowances account for the routed journey.
+- **509 Harbour Loop** retains its ten Toronto stops. **900 Lakeshore Intercity** serves six stops, travelling Toronto → Pickering → Oshawa and back.
+- GPS uses directed street lanes, proper ramp entry/exit, and the correct deck. Missing an exit sends you to another interchange to return. End-of-corridor turning areas have a median opening; slow down to turn.
+- Gardiner/Lakeshore Expressway crosses above Lake Shore Boulevard. Eastbound ramps cross beneath the expressway before climbing alongside it, with clear space for buses and no piers in their path.
+- City meshes are split into spatial cells. Each view submits nearby cells within its viewing cone; distant cities are not drawn. The software renderer also indexes bridge-occlusion tests spatially.
+- Shifts save in this browser every eight seconds and on pause/map/exit. Use **Continue saved shift** after reloading. Each Pages link has its own browser save. Restart starts fresh.
 
 ## Controls
-- Enter starts or confirms. Arrow keys / W S select menus.
-- WASD / arrows drive. S / down brakes, then reverses. Space brakes.
-- Hold Shift with the pedals for precision parking: approximately 30 forward / 20 reverse.
-- Q / E glance left / right. Hold C to look behind. The rearview mirror is a live, horizontally mirrored rear view.
-- Tab opens a paused dispatch map. Esc / P pauses; H opens the handbook.
-- R calls roadside assistance ($15, 10 seconds, 5 condition). L toggles low-power rendering; M toggles engine sound.
 
-## Design
-An interpolated, stable driver-eye camera follows the cab. The dashboard, steering wheel, hands and forearms are drawn as a lightweight faceted cockpit overlay; the wheel and both grips rotate with steering input. No artificial camera shake or bob is applied. The world and moving cars use real perspective-projected 3D geometry.
+Enter starts/confirms; arrows select menu rows, and left/right changes a setting. WASD or arrows drive; S/down brakes, then reverses. Space brakes. Q/E look left/right; C looks behind. Shift plus the pedals gives fine parking control. Escape/P pauses; F1 opens help; Tab opens the regional map; H sounds the horn; R calls roadside assist ($15); L toggles low power; M toggles sound.
 
-Seeded Toronto-inspired streets include two lanes each direction, traffic signals, parking bays, an expressway with merge traffic, a waterfront and recognizable CN Tower, Rogers Centre and aquarium shapes. This is a compact fictional layout, not a geographic street map.
+Choose taxi/bus, dispatch/service, start time (12-hour display), and traffic level with the keyboard. Fines and assist can leave the balance below zero. Low power limits rendering to 30 FPS and reduces resolution/draw distance; it is not a guarantee of 30 FPS on every device.
 
-The simulation is shared with the 2D game, without changing that engine. First-person fare timers are more generous. Follow the blue lane to a pickup and amber lane to delivery. Match the bay arrow, center the cab and stop; reverse bays require real backward movement. Fares, deadlines and rush-hour traffic continue through an endless shift. Three missed calls or zero cab condition ends the run.
+## Build and validation
 
-## Rendering and compatibility
-WebGL 1 is the primary renderer. If unavailable, a Canvas2D software renderer uses the same 3D city mesh, perspective, clipping and mirrored camera, automatically starting in low-power mode. It has fog, cached static geometry, bounded queues and a reduced-detail mirror. Far vehicles use simpler geometry; traffic remains capped at 64. If neither renderer can start, a readable message links to the original 2D edition.
+Static HTML/CSS/JavaScript, no backend, dependencies, or build step. Release `regional-11`. Serve with `python3 -m http.server 8080`.
 
-## Verification
-- 49 automated engine, geometry and mock-runtime checks passed, including a complete physical-input first fare, stable timestep interpolation, keyboard menus, Shift precision control, reverse requirements, traffic caps and context-loss handling.
-- 200 seeded cities were checked for finite geometry and bounded size; 10,515 lane, ramp and parking-access samples found no static obstruction.
-- The public software-rendered game completed the entire first fare using actual keyboard controls: $79 earned, 100 condition, one delivery and next dispatch. No teleporting or game-state injection was used. A red-light penalty was observed; a separate deliberate wall collision verified damage and the repair charge. Help, map, pause, brake and reverse were checked in the browser.
-- Native WebGL visual rendering could not be verified because the available cloud browser disables WebGL. The shader/buffer API path was tested with mocks. Software 3D was visually and interactively verified. This is not a physical old-hardware benchmark or a player-retention study.
+Engine tests: `node tests-region.cjs`, `node physical-regression.cjs`, `node physics-checks.cjs`. Browser regression: `node browser-regression.cjs` (requires Playwright and `/usr/bin/chromium`; uses port 8080 for this game and 8081 for the previous revision when comparing performance). The `?test` URL enables placement helpers solely for reproducible regression.
 
-All game assets are generated in code. No external runtime requests are needed after the static files load.
+See [evidence/REPORT.md](evidence/REPORT.md) for the measured results, test boundaries, screenshots and publishing evidence. Cloud Chromium testing covers WebGL through SwiftShader and the Canvas2D fallback; it does not constitute physical Chromebook validation.
