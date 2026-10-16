@@ -3,8 +3,8 @@
 (function(root){'use strict';
 const T=root.Taxi3D;
 function build(map){
- const mesh=new T.Mesh(),signs=[],stats={districts:map.districts.length};mesh.cull=[];mesh.underRoad=[];mesh.roadMap=map;
- function append(source,dx=0){const a=source.data;for(let i=0;i<a.length;i+=6)mesh.data.push(a[i]+dx,a[i+1],a[i+2],a[i+3],a[i+4],a[i+5]);for(let i=0;i<a.length/18;i++){mesh.cull.push(source.cull?.[i]||0);mesh.underRoad.push(source.underRoad?.[i]||0);}}
+ const mesh=new T.Mesh(),signs=[],stats={districts:map.districts.length};mesh.cull=[];mesh.underRoad=[];mesh.roadSurface=[];mesh.roadMap=map;
+ function append(source,dx=0){const triangleOffset=mesh.data.length/18,a=source.data;for(let i=0;i<a.length;i+=6)mesh.data.push(a[i]+dx,a[i+1],a[i+2],a[i+3],a[i+4],a[i+5]);for(let i=0;i<a.length/18;i++){mesh.cull.push(source.cull?.[i]||0);mesh.underRoad[triangleOffset+i]=source.underRoad?.[i]||0;mesh.roadSurface[triangleOffset+i]=source.roadSurface?.[i]||0;}}
  // Local origins keep the original city builder and its collision geometry intact.
  for(const [di,d] of map.districts.entries()){
   d.renderMap.regionTileGround=true;d.renderMap.terminalWest=di===0;d.renderMap.terminalEast=di===map.districts.length-1;
@@ -13,6 +13,8 @@ function build(map){
   for(const key of ['buildings','triangles','vertices','trees','ramps'])stats[key]=(stats[key]||0)+(city.stats[key]||0);
  }
  const H=map.highwayHeight,z=map.hy;
+ for(let station=map.highwayStart+600;station<map.highwayEnd-300;station+=2400)for(const dir of[-1,1])for(const [lat,text]of[[40,'EXPRESS · THROUGH'],[134,'COLLECTORS · CITY EXITS']]){const p=root.TaxiHighway.at(map,station,dir*lat);signs.push({x:p.x,y:H+18,z:p.y,text,color:'#40695d'});}
+
  function bridge(a,b,theme){
   for(let x=a;x<b;x+=80){const end=Math.min(x+80,b),w=end-x;
    mesh.quad([x,H,z-76],[x,H,z+76],[end,H,z+76],[end,H,z-76],'#515d66');
@@ -33,7 +35,7 @@ function build(map){
   for(const s of [-1,1])mesh.line(a,z-850+s*6,b,z-850+s*6,2,1,'#8b8a79');
  }
  for(let i=1;i<map.districts.length;i++){
-  const a=map.districts[i-1].highwayEnd,b=map.districts[i].highwayStart;bridge(a,b,i===1?'freight':'wetland');
+  const a=map.districts[i-1].highwayEnd,b=map.districts[i].highwayStart;// Deck, ramps and railings come from the shared highway model.
   for(let x=a+300;x<b-100;x+=520){mesh.line(x,z-860,x,z-840,3,1,'#afa992');}
   for(const dir of [-1,1]){
    const x=dir>0?a+900:b-900,city=dir>0?map.districts[i].name:map.districts[i-1].name;
@@ -75,8 +77,12 @@ function build(map){
   }
  }
 
+ append(root.TaxiHighway.build(map,root.TaxiRoads,T));
+ for(const profile of map.roadProfiles){const q=root.TaxiRoads.pointAt(profile,0),x=q.x+(profile.kind==='entry'?-54:54),tz=q.z+75;mesh.box(x,25,tz,2,50,2,'#6a8278');mesh.box(x,45,tz,48,10,2,'#356859');signs.push({x,y:54,z:tz,text:(profile.street==='Spadina Avenue'?'SPADINA · ':'')+(profile.kind==='entry'?(profile.highwayDir>0?'EAST':'WEST')+' COLLECTOR ON-RAMP':'EXIT TO CITY STREETS'),color:'#356859'});}
+ for(const station of[map.highwayStart+130,map.highwayEnd-130]){const q=root.TaxiHighway.at(map,station,190);signs.push({x:q.x,y:H+25,z:q.y,text:'END · SLOW FOR TURNAROUND',color:'#8d7146'});}
+
  for(const p of map.roadProfiles.filter(p=>p.kind==='exit')){
-  const x=p.highwayJoin.x-p.highwayDir*350,side=p.highwayDir,zp=z+side*83;
+  const q=root.TaxiHighway.at(map,p.highwayJoin.x-p.highwayDir*350,p.highwayDir*194),x=q.x,side=p.highwayDir,zp=q.y;
   mesh.box(x,H+33,zp,2,66,2,'#657d76');mesh.box(x,H+56,zp,100,30,3,'#306457');
   signs.push({x,y:H+69,z:zp,text:'EXIT '+(map.districts.findIndex(d=>d.id===p.districtId)+1)+' · '+p.city.toUpperCase()+' ↗',color:'#306457'});
  }
@@ -100,7 +106,7 @@ function build(map){
 }
 function chunks(mesh,size=400){
  const bins=new Map();
- function add(a,b,c,t){const x=(a[0]+b[0]+c[0])/3,z=(a[2]+b[2]+c[2])/3,key=Math.floor(x/size)+','+Math.floor(z/size);let bin=bins.get(key);if(!bin){bin=new T.Mesh();bin.underRoad=[];bin.roadMap=mesh.roadMap;bin.bounds={minX:Infinity,maxX:-Infinity,minZ:Infinity,maxZ:-Infinity};bins.set(key,bin);}const color=a.slice(3,6);bin.tri(a,b,c,color);bin.cull[bin.cull.length-1]=mesh.cull[t]||0;bin.underRoad.push(mesh.underRoad?.[t]||0);for(const p of[a,b,c]){bin.bounds.minX=Math.min(bin.bounds.minX,p[0]);bin.bounds.maxX=Math.max(bin.bounds.maxX,p[0]);bin.bounds.minZ=Math.min(bin.bounds.minZ,p[2]);bin.bounds.maxZ=Math.max(bin.bounds.maxZ,p[2]);}}
+ function add(a,b,c,t){const x=(a[0]+b[0]+c[0])/3,z=(a[2]+b[2]+c[2])/3,key=Math.floor(x/size)+','+Math.floor(z/size);let bin=bins.get(key);if(!bin){bin=new T.Mesh();bin.underRoad=[];bin.roadSurface=[];bin.roadMap=mesh.roadMap;bin.bounds={minX:Infinity,maxX:-Infinity,minZ:Infinity,maxZ:-Infinity};bins.set(key,bin);}const color=a.slice(3,6);bin.tri(a,b,c,color);bin.cull[bin.cull.length-1]=mesh.cull[t]||0;bin.underRoad.push(mesh.underRoad?.[t]||0);bin.roadSurface.push(mesh.roadSurface?.[t]||0);for(const p of[a,b,c]){bin.bounds.minX=Math.min(bin.bounds.minX,p[0]);bin.bounds.maxX=Math.max(bin.bounds.maxX,p[0]);bin.bounds.minZ=Math.min(bin.bounds.minZ,p[2]);bin.bounds.maxZ=Math.max(bin.bounds.maxZ,p[2]);}}
  function split(a,b,c,t,depth=0){
   const ab=Math.hypot(a[0]-b[0],a[2]-b[2]),bc=Math.hypot(b[0]-c[0],b[2]-c[2]),ca=Math.hypot(c[0]-a[0],c[2]-a[2]),long=Math.max(ab,bc,ca);
   if(long>700&&depth<16){let p=a,q=b,r=c;if(bc===long){p=b;q=c;r=a;}else if(ca===long){p=c;q=a;r=b;}const mid=p.map((v,i)=>(v+q[i])/2);split(p,mid,r,t,depth+1);split(mid,q,r,t,depth+1);}else add(a,b,c,t);
